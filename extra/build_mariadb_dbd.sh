@@ -14,5 +14,5 @@ lua_incdir=/usr/include/lua5.1
 
 cd $curdir/..
 
-make mysql CFLAGS="-g -pedantic -Wall -O2 -shared -fpic -I ${lua_incdir} -I./build/mariadb-${maria_version}/include -I ." MARIADB_LDFLAGS="-L./build/mariadb-${maria_version}/libmysql/ -L/usr/lib64 -L/usr/lib -lmysqlclient -lssl -lm -lrt -llua"
+make mysql CFLAGS="-g -pedantic -Wall -O2 -shared -fpic -I ${lua_incdir} -I./build/mariadb-${maria_version}/include -I ." MYSQL_LDFLAGS="-L./build/mariadb-${maria_version}/libmysql/ -L/usr/lib64 -L/usr/lib -lmysqlclient -lssl -lm -lrt -llua"
 
