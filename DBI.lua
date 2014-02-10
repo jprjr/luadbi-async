@@ -1,5 +1,3 @@
-#!/usr/bin/lua
-
 module('DBI', package.seeall)
 
 -- Driver to module mapping
