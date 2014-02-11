@@ -13,9 +13,9 @@ SQLITE3_LDFLAGS=$(COMMON_LDFLAGS) -lsqlite3
 
 BUILDDIR=build
 
-DBDMYSQL=dbdmysql-async.$(EXT)
-DBDPSQL=dbdpostgresql-async.$(EXT)
-DBDSQLITE3=dbdsqlite3-async.$(EXT)
+DBDMYSQL=dbdmysqlasync.$(EXT)
+DBDPSQL=dbdpostgresqlasync.$(EXT)
+DBDSQLITE3=dbdsqlite3async.$(EXT)
 
 OBJS=build/dbd_common.o
 MYSQL_OBJS=$(OBJS) build/dbd_mysql_main.o build/dbd_mysql_connection.o build/dbd_mysql_statement.o

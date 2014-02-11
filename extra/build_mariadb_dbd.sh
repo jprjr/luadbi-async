@@ -16,9 +16,10 @@ lua_base=${HOME}/.luaenv/versions/${lua_version}
 lua_incdir=${lua_base}/include
 lua_libdir=${lua_base}/lib
 lua_cdir=${lua_base}/lib/lua/${lua_ver}
+lua_shdir=${lua_base}/share/lua/${lua_ver}
 
 cd $curdir/..
 
 make mysql CFLAGS="-g -pedantic -Wall -O2 -shared -fpic -I ${lua_incdir} -I /usr/include/mysql -I /usr/include -I ." MYSQL_LDFLAGS="-Wl,-rpath=${lua_libdir} -L${lua_libdir} -L${lua_cdir} -L/usr/lib64 -L/usr/lib -lmysqlclient -llua"
-cp DBI.lua ${lua_cdir}
-cp dbdmysql.so ${lua_cdir}
+cp DBIasync.lua ${lua_shdir}
+cp dbdmysqlasync.so ${lua_cdir}
