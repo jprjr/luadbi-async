@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Example for building the MariaDB driver with the bundled MariaDB
+# Example for building the MariaDB driver with a system-installed
+# mariadb
 
 set -e
 set -x
@@ -9,10 +10,15 @@ realpath_portable() {
 }
 
 curdir=$(dirname $(realpath_portable "$0"))
-maria_version=5.5.35
-lua_incdir=/usr/include/lua5.1
+lua_version=5.1.5
+lua_ver=${lua_version:0:3}
+lua_base=${HOME}/.luaenv/versions/${lua_version}
+lua_incdir=${lua_base}/include
+lua_libdir=${lua_base}/lib
+lua_cdir=${lua_base}/lib/lua/${lua_ver}
 
 cd $curdir/..
 
-make mysql CFLAGS="-g -pedantic -Wall -O2 -shared -fpic -I ${lua_incdir} -I./build/mariadb-${maria_version}/include -I ." MYSQL_LDFLAGS="-L./build/mariadb-${maria_version}/libmysql/ -L/usr/lib64 -L/usr/lib -lmysqlclient -lssl -lm -lrt -llua"
-
+make mysql CFLAGS="-g -pedantic -Wall -O2 -shared -fpic -I ${lua_incdir} -I /usr/include/mysql -I /usr/include -I ." MYSQL_LDFLAGS="-Wl,-rpath=${lua_libdir} -L${lua_libdir} -L${lua_cdir} -L/usr/lib64 -L/usr/lib -lmysqlclient -llua"
+cp DBI.lua ${lua_cdir}
+cp dbdmysql.so ${lua_cdir}
