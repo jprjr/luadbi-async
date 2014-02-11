@@ -2,11 +2,9 @@ module('DBI', package.seeall)
 
 -- Driver to module mapping
 local name_to_module = {
-    MySQL = 'dbdmysql',
-    PostgreSQL = 'dbdpostgresql',
-    SQLite3 = 'dbdsqlite3',
-    DB2 = 'dbddb2',
-    Oracle = 'dbdoracle',
+    MySQL = 'dbdmysql-async',
+    PostgreSQL = 'dbdpostgresql-async',
+    SQLite3 = 'dbdsqlite3-async',
 }
 
 local string = require('string')
