@@ -59,7 +59,7 @@ Non-blocking equivalents of these functions will have `<function>_start` and `<f
 
 ## Requirements
 
-Right now, the MySQL client libraries don't have async methods, but MariaDB does. So this *requires* a MariaDB client.
+Right now, the MySQL client libraries don't have (documented) async methods, but MariaDB does. So this *requires* the MariaDB client, it shouldn't compile against MySQL.
 
 The "MariaDB Client Library for C" package doesn't support the async methods, so it's necessary to download the full MariaDB package and build the client from that.
 
