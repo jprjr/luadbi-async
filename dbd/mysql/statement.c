@@ -130,6 +130,197 @@ static int statement_columns(lua_State *L) {
     return 1;
 }
 
+/*
+ * success,event = statement:execute(...)
+ */
+static int statement_execute_start(lua_State *L) {
+    int n = lua_gettop(L);
+    statement_t *statement = (statement_t *)luaL_checkudata(L, 1, DBD_MYSQL_STATEMENT); 
+    int num_bind_params = n - 1;
+    int expected_params;
+
+    unsigned char *buffer = NULL;
+    int offset = 0;
+    
+    MYSQL_BIND *bind = NULL;
+    MYSQL_RES *metadata = NULL;
+
+    char *error_message = NULL;
+    char *errstr = NULL;
+
+    int p;
+
+    if (statement->metadata) {
+	/*
+	 * free existing metadata from any previous executions
+	 * TODO mysql_free_result blocks
+         */
+	mysql_free_result(statement->metadata);
+	statement->metadata = NULL;
+    }
+
+    if (!statement->stmt) {
+	lua_pushboolean(L, 0);
+	lua_pushstring(L, DBI_ERR_EXECUTE_INVALID);
+	return 2;
+    }
+
+    expected_params = mysql_stmt_param_count(statement->stmt);
+
+    if (expected_params != num_bind_params) {
+	/*
+         * mysql_stmt_bind_param does not handle this condition,
+         * and the client library will segfault if these do no match
+         */ 
+	lua_pushboolean(L, 0);
+	lua_pushfstring(L, DBI_ERR_PARAM_MISCOUNT, expected_params, num_bind_params); 
+	return 2;
+    }
+
+    if (num_bind_params > 0) {
+        bind = malloc(sizeof(MYSQL_BIND) * num_bind_params);
+        if (bind == NULL) {
+            luaL_error(L, "Could not alloc bind params\n");
+        }
+
+        buffer = (unsigned char *)malloc(num_bind_params * sizeof(double));
+        memset(bind, 0, sizeof(MYSQL_BIND) * num_bind_params);
+    }
+
+    for (p = 2; p <= n; p++) { /* {{{ */
+	int type = lua_type(L, p);
+	int i = p - 2;
+
+	const char *str = NULL;
+	size_t *str_len = NULL;
+	double *num = NULL;
+	int *boolean = NULL;
+	char err[64];
+
+	switch(type) {
+	    case LUA_TNIL:
+		bind[i].buffer_type = MYSQL_TYPE_NULL;
+		bind[i].is_null = (my_bool*)1;
+		break;
+
+	    case LUA_TBOOLEAN:
+		boolean = (int *)(buffer + offset);
+		offset += sizeof(int);
+		*boolean = lua_toboolean(L, p);
+
+		bind[i].buffer_type = MYSQL_TYPE_LONG;
+		bind[i].is_null = (my_bool*)0;
+		bind[i].buffer = (char *)boolean;
+		bind[i].length = 0;
+		break;
+
+	    case LUA_TNUMBER:
+		/*
+		 * num needs to be it's own 
+		 * memory here
+                 */
+		num = (double *)(buffer + offset);
+		offset += sizeof(double);
+		*num = lua_tonumber(L, p);
+
+		bind[i].buffer_type = MYSQL_TYPE_DOUBLE;
+		bind[i].is_null = (my_bool*)0;
+		bind[i].buffer = (char *)num;
+		bind[i].length = 0;
+		break;
+
+	    case LUA_TSTRING:
+		str_len = (size_t *)(buffer + offset);
+		offset += sizeof(size_t);
+		str = lua_tolstring(L, p, str_len);
+
+		bind[i].buffer_type = MYSQL_TYPE_STRING;
+		bind[i].is_null = (my_bool*)0;
+		bind[i].buffer = (char *)str;
+		bind[i].length = str_len;
+		break;
+
+	    default:
+		snprintf(err, sizeof(err)-1, DBI_ERR_BINDING_TYPE_ERR, lua_typename(L, type));
+		errstr = err;
+		error_message = DBI_ERR_BINDING_PARAMS;
+		goto cleanup;
+	}
+    } /* }}} */
+
+    if (mysql_stmt_bind_param(statement->stmt, bind)) {
+	error_message = DBI_ERR_BINDING_PARAMS;
+	goto cleanup;
+    }
+
+    statement->event = mysql_stmt_execute_start(&(statement->ret), statement->stmt);
+    if(statement->event == MYSQL_WAIT_TIMEOUT) {
+        statement->timeout = 1000*mysql_get_timeout_value_ms(statement->mysql);
+    }
+
+cleanup:
+    if (bind) { 
+	free(bind);
+    }
+
+    if (buffer) {
+        free(buffer);
+    }
+
+    if (error_message) {
+	lua_pushboolean(L, 0);
+	lua_pushfstring(L, error_message, errstr ? errstr : mysql_stmt_error(statement->stmt));
+	return 2;
+    }
+
+    lua_pushboolean(L, 1);
+    lua_pushnumber(L, convert_mysql_to_ev(statement->event));
+    return 2;
+}
+
+/*
+ * success,err = statement:execute_cont(...)
+ */
+static int statement_execute_cont(lua_State *L) {
+    statement_t *statement = (statement_t *)luaL_checkudata(L, 1, DBD_MYSQL_STATEMENT); 
+    int event = convert_ev_to_mysql(lua_tonumber(L, 2));
+    MYSQL_RES *metadata = NULL;
+
+    if(!statement->stmt) {
+        luaL_error(L,DBI_ERR_INVALID_STATEMENT);
+    }
+    statement->event = mysql_stmt_execute_cont(&(statement->ret), statement->stmt, event);
+    if(statement->event == MYSQL_WAIT_TIMEOUT) {
+        statement->timeout = 1000*mysql_get_timeout_value_ms(statement->mysql);
+        /* if(statement->timeout == 0) {
+            while( (statement->event = mysql_stmt_execute_cont(&(statement->ret), statement->stmt, statement->event) ) ) { printf("Calling execute_cont\n"); }
+        } */
+    }
+    if(statement->ret) {
+        lua_pushnil(L);
+        lua_pushfstring(L, DBI_ERR_BINDING_EXEC, mysql_stmt_error(statement->stmt));
+        return 2;
+    }
+    if(statement->event > 0) {
+        lua_pushboolean(L, 0);
+        lua_pushnil(L);
+        lua_pushnumber(L, convert_mysql_to_ev(statement->event));
+        return 3;
+    }
+
+    metadata = mysql_stmt_result_metadata(statement->stmt);
+
+    if (metadata) {
+        /* TODO stmt_store_result blocks */
+        mysql_stmt_store_result(statement->stmt);
+    }
+    statement->metadata = metadata;
+
+    lua_pushboolean(L,1);
+    return 1;
+}
+
+
 
 /*
  * success,err = statement:execute(...)
@@ -532,39 +723,124 @@ static int statement_tostring(lua_State *L) {
     return 1;
 }
 
-int dbd_mysql_statement_create(lua_State *L, connection_t *conn, const char *sql_query) { 
-    unsigned long sql_len = strlen(sql_query);
 
+int dbd_mysql_statement_create(lua_State *L, connection_t *conn) { 
     statement_t *statement = NULL;
-
     MYSQL_STMT *stmt = mysql_stmt_init(conn->mysql);
 
-    if (!stmt) {
+    if(!stmt) {
 	lua_pushnil(L);
 	lua_pushfstring(L, DBI_ERR_ALLOC_STATEMENT, mysql_error(conn->mysql));
 	return 2;
     }
-
-    if (mysql_stmt_prepare(stmt, sql_query, sql_len)) {
-	lua_pushnil(L);
-	lua_pushfstring(L, DBI_ERR_PREP_STATEMENT, mysql_stmt_error(stmt));
-	return 2;
-    }
-
+        
     statement = (statement_t *)lua_newuserdata(L, sizeof(statement_t));
     statement->mysql = conn->mysql;
     statement->stmt = stmt;
     statement->metadata = NULL;
 
-    /*
-    mysql_stmt_attr_set(stmt, STMT_ATTR_UPDATE_MAX_LENGTH, (my_bool*)0);
-    */
-
     luaL_getmetatable(L, DBD_MYSQL_STATEMENT);
     lua_setmetatable(L, -2);
 
     return 1;
+}
+
+/*
+ * success, err = stmt:prepare(query)
+ */
+static int statement_prepare(lua_State *L) { 
+    statement_t *statement = (statement_t *)luaL_checkudata(L, 1, DBD_MYSQL_STATEMENT);
+    const char* sql_query = luaL_checkstring(L, 2);
+    unsigned long sql_len = strlen(sql_query);
+
+    if (!statement->stmt) {
+        luaL_error(L, DBI_ERR_INVALID_STATEMENT);
+    }
+
+    if (mysql_stmt_prepare(statement->stmt, sql_query, sql_len)) {
+	lua_pushnil(L);
+	lua_pushfstring(L, DBI_ERR_PREP_STATEMENT, mysql_stmt_error(statement->stmt));
+	return 2;
+    }
+
+    lua_pushboolean(L, 1);
+    return 1;
 } 
+
+/*
+ * success, event = stmt:prepare_start(query)
+ */
+static int statement_prepare_start(lua_State *L) { 
+    statement_t *statement = (statement_t *)luaL_checkudata(L, 1, DBD_MYSQL_STATEMENT);
+    const char* sql_query = luaL_checkstring(L, 2);
+    unsigned long sql_len = strlen(sql_query);
+
+    if (!statement->stmt) {
+        luaL_error(L, DBI_ERR_INVALID_STATEMENT);
+    }
+
+    statement->event = mysql_stmt_prepare_start(&(statement->ret), statement->stmt, sql_query, sql_len);
+
+    /* TODO check for errors? */
+    if(statement->event == MYSQL_WAIT_TIMEOUT) {
+        statement->timeout = 1000 * mysql_get_timeout_value_ms(statement->mysql);
+    }
+
+    lua_pushboolean(L, 1);
+    lua_pushnumber(L, convert_mysql_to_ev(statement->event));
+    return 2;
+} 
+
+/*
+ * success, err, event = stmt:prepare_cont(event)
+ */
+static int statement_prepare_cont(lua_State *L) { 
+    statement_t *statement = (statement_t *)luaL_checkudata(L, 1, DBD_MYSQL_STATEMENT);
+    int event = convert_ev_to_mysql(lua_tonumber(L, 2));
+
+    if (!statement->stmt) {
+        luaL_error(L, DBI_ERR_INVALID_STATEMENT);
+    }
+    statement->event = mysql_stmt_prepare_cont(&(statement->ret), statement->stmt, event);
+    if(statement->event == MYSQL_WAIT_TIMEOUT) {
+        statement->timeout = 1000*mysql_get_timeout_value_ms(statement->mysql);
+        /* if(statement->timeout == 0) {
+            while( (statement->event = mysql_stmt_prepare_cont(&(statement->ret), statement->stmt, event)) ) {}
+        } */
+    }
+    if(statement->ret) {
+        lua_pushnil(L);
+        lua_pushfstring(L, DBI_ERR_PREP_STATEMENT, mysql_stmt_error(statement->stmt) );
+        return 2;
+    }
+    if(statement->event > 0) {
+        lua_pushboolean(L, 0);
+        lua_pushnil(L);
+        lua_pushnumber(L, convert_mysql_to_ev(statement->event));
+        return 3;
+    }
+    lua_pushboolean(L,1);
+    return 1;
+}
+
+static int statement_get_event(lua_State *L) {
+    statement_t *statement = (statement_t *)luaL_checkudata(L, 1, DBD_MYSQL_STATEMENT);
+    lua_pushnumber(L, convert_mysql_to_ev(statement->event));
+    return 1;
+}
+
+static int statement_get_timeout(lua_State *L) {
+    statement_t *statement = (statement_t *)luaL_checkudata(L, 1, DBD_MYSQL_STATEMENT);
+    lua_pushnumber(L, statement->timeout );
+    return 1;
+}
+
+static int statement_get_socket(lua_State *L) {
+    statement_t *statement = (statement_t *)luaL_checkudata(L, 1, DBD_MYSQL_STATEMENT);
+    lua_pushnumber(L, mysql_get_socket(statement->mysql) );
+    return 1;
+}
+
 
 int dbd_mysql_statement(lua_State *L) {
     static const luaL_Reg statement_methods[] = {
@@ -572,7 +848,15 @@ int dbd_mysql_statement(lua_State *L) {
 	{"close", statement_close},
 	{"columns", statement_columns},
 	{"execute", statement_execute},
+	{"execute_start", statement_execute_start},
+	{"execute_cont", statement_execute_cont},
 	{"fetch", statement_fetch},
+        {"get_event", statement_get_event},
+        {"get_socket", statement_get_socket},
+        {"get_timeout", statement_get_timeout},
+	{"prepare", statement_prepare},
+	{"prepare_start", statement_prepare_start},
+	{"prepare_cont", statement_prepare_cont},
 	{"rowcount", statement_rowcount},
 	{"rows", statement_rows},
 	{NULL, NULL}

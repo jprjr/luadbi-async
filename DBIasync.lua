@@ -32,7 +32,7 @@ end
 
  -- High level DB connection function
  -- This should be used rather than DBD.{Driver}.New
-function Connect(driver, ...)
+function New(driver)
     local modulefile = name_to_module[driver]
 
     if not modulefile then
@@ -52,8 +52,7 @@ function Connect(driver, ...)
 
     local connection_class = package.loaded[class_str]
 
-    -- Calls DBD.{Driver}.New(...)
-    return connection_class.New(...)
+    return connection_class.New()
 end
 
 -- Help function to do prepare and execute in 
