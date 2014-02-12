@@ -52,7 +52,11 @@ Right now, the MySQL client libraries don't have async methods, but MariaDB does
 
 The "MariaDB Client Library for C" package doesn't support the async methods, so it's necessary to download the full MariaDB package and build the client from that.
 
+If your distro has MariaDB client and header packages available, I suggest using that.
+
+Please note that the MariaDB client can still connect to MySQL server - I've been testing this against an install of MySQL 5.1.
+
 ## STATUS
 
-### MySQL: async connect, prepare, and execute is mostly done
+### MySQL: async connect, prepare, and execute is ~~~mostly done~~~ working
 ### PostgreSQL: not started
