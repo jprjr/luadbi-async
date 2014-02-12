@@ -30,6 +30,10 @@ function cb(e)
   return luaevent.LEAVE
 end
 
+function othercallback(e)
+  print("I'll appear after a second!")
+end
+
 stmt:prepare("select sleep(6) as awesome");
 
 local success, event = stmt:execute_start();
@@ -38,8 +42,15 @@ if success then
   local socket = dbh:get_socket();
   local ebase = luaevent.new();
   ebase:addevent(socket, event, cb);
+  ebase:addevent(nil, luaevent.EV_TIMEOUT, othercallback, 1);
   ebase:loop()
 end
+
+-- This should output:
+-- Started execute, waiting for data to come in
+-- I'll appear after a second!
+-- In the cb function
+-- 0 (the result of calling sleep)
 ```
 
 Methods like `connect` and `execute` are blocking by default, and operate just as they do in normal luadbi.
