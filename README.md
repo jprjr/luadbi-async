@@ -58,5 +58,5 @@ Please note that the MariaDB client can still connect to MySQL server - I've bee
 
 ## STATUS
 
-### MySQL: async connect, prepare, and execute is ~~~mostly done~~~ working
+### MySQL: async connect, prepare, and execute is ~~mostly done~~ working
 ### PostgreSQL: not started
