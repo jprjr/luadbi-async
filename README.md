@@ -4,6 +4,48 @@ This is a fork of LuaDBI, modified to provide asynchronious database access.
 
 The original LuaDBI is available at http://code.google.com/p/luadbi/
 
+## Usage
+
+The usage for this is a bit different from the normal DBI. The main DBI module has been renamed (I don't want anybody thinking this is a drop-in replacement for luadbi), and connection and statement objects are made explicitly.
+
+```lua
+#!/usr/bin/env lua
+
+require "DBIasync";
+local luaevent = require "luaevent.core";
+
+local dbh = DBI.New('MySQL');
+dbh:connect('dbname','dbuser','dbpass', 'host');
+local stmt = dbh:new_statement();
+
+-- silly callback function
+function cb(e)
+  print("In the cb function");
+  local success, err = stmt:execute_cont(e);
+  if(success) then
+      for row in stmt:rows() do
+          print(row[1])
+      end
+  end
+  return luaevent.LEAVE
+end
+
+stmt:prepare("select sleep(6) as awesome");
+
+local success, event = stmt:execute_start();
+if success then
+  print("Started execute, waiting for data to come in");
+  local socket = dbh:get_socket();
+  local ebase = luaevent.new();
+  ebase:addevent(socket, event, cb);
+  ebase:loop()
+end
+```
+
+Methods like `connect` and `execute` are blocking by default, and operate just as they do in normal luadbi.
+
+Non-blocking equivalents of these functions will have `\_start` and `\_cont` equivalents. The `\_start` submits a task and returns wait event to wait on. You can then get the socket in use by your connection, and link it all together with your event-y framework.
+
 ## Requirements
 
 Right now, the MySQL client libraries don't have async methods, but MariaDB does. So this *requires* a MariaDB client.
