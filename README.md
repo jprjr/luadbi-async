@@ -44,7 +44,7 @@ end
 
 Methods like `connect` and `execute` are blocking by default, and operate just as they do in normal luadbi.
 
-Non-blocking equivalents of these functions will have `\_start` and `\_cont` equivalents. The `\_start` submits a task and returns wait event to wait on. You can then get the socket in use by your connection, and link it all together with your event-y framework.
+Non-blocking equivalents of these functions will have `<function>_start` and `<function>_cont` functions. The `_start` submits a task and returns wait event to wait on. You can then get the socket in use by your connection, and link it all together with your event-y framework. `<function>_cont` will return any errors encountered.
 
 ## Requirements
 
