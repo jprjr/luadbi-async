@@ -30,6 +30,8 @@ typedef struct _statement {
     int event;
     int timeout;
     MYSQL_RES *metadata; /* result dataset metadata */
+    MYSQL_BIND *bind;
+    MYSQL_FIELD *fields;
 } statement_t;
 
 static int convert_ev_to_mysql (int status) {

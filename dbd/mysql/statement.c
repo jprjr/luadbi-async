@@ -142,9 +142,6 @@ static int statement_execute_start(lua_State *L) {
     unsigned char *buffer = NULL;
     int offset = 0;
     
-    MYSQL_BIND *bind = NULL;
-    MYSQL_RES *metadata = NULL;
-
     char *error_message = NULL;
     char *errstr = NULL;
 
@@ -153,7 +150,7 @@ static int statement_execute_start(lua_State *L) {
     if (statement->metadata) {
 	/*
 	 * free existing metadata from any previous executions
-	 * TODO mysql_free_result blocks
+	 * TODO mysql_free_result is blocking
          */
 	mysql_free_result(statement->metadata);
 	statement->metadata = NULL;
@@ -178,13 +175,13 @@ static int statement_execute_start(lua_State *L) {
     }
 
     if (num_bind_params > 0) {
-        bind = malloc(sizeof(MYSQL_BIND) * num_bind_params);
-        if (bind == NULL) {
+        statement->bind = malloc(sizeof(MYSQL_BIND) * num_bind_params);
+        if (statement->bind == NULL) {
             luaL_error(L, "Could not alloc bind params\n");
         }
 
         buffer = (unsigned char *)malloc(num_bind_params * sizeof(double));
-        memset(bind, 0, sizeof(MYSQL_BIND) * num_bind_params);
+        memset(statement->bind, 0, sizeof(MYSQL_BIND) * num_bind_params);
     }
 
     for (p = 2; p <= n; p++) { /* {{{ */
@@ -199,8 +196,8 @@ static int statement_execute_start(lua_State *L) {
 
 	switch(type) {
 	    case LUA_TNIL:
-		bind[i].buffer_type = MYSQL_TYPE_NULL;
-		bind[i].is_null = (my_bool*)1;
+		statement->bind[i].buffer_type = MYSQL_TYPE_NULL;
+		statement->bind[i].is_null = (my_bool*)1;
 		break;
 
 	    case LUA_TBOOLEAN:
@@ -208,10 +205,10 @@ static int statement_execute_start(lua_State *L) {
 		offset += sizeof(int);
 		*boolean = lua_toboolean(L, p);
 
-		bind[i].buffer_type = MYSQL_TYPE_LONG;
-		bind[i].is_null = (my_bool*)0;
-		bind[i].buffer = (char *)boolean;
-		bind[i].length = 0;
+		statement->bind[i].buffer_type = MYSQL_TYPE_LONG;
+		statement->bind[i].is_null = (my_bool*)0;
+		statement->bind[i].buffer = (char *)boolean;
+		statement->bind[i].length = 0;
 		break;
 
 	    case LUA_TNUMBER:
@@ -223,10 +220,10 @@ static int statement_execute_start(lua_State *L) {
 		offset += sizeof(double);
 		*num = lua_tonumber(L, p);
 
-		bind[i].buffer_type = MYSQL_TYPE_DOUBLE;
-		bind[i].is_null = (my_bool*)0;
-		bind[i].buffer = (char *)num;
-		bind[i].length = 0;
+		statement->bind[i].buffer_type = MYSQL_TYPE_DOUBLE;
+		statement->bind[i].is_null = (my_bool*)0;
+		statement->bind[i].buffer = (char *)num;
+		statement->bind[i].length = 0;
 		break;
 
 	    case LUA_TSTRING:
@@ -234,10 +231,10 @@ static int statement_execute_start(lua_State *L) {
 		offset += sizeof(size_t);
 		str = lua_tolstring(L, p, str_len);
 
-		bind[i].buffer_type = MYSQL_TYPE_STRING;
-		bind[i].is_null = (my_bool*)0;
-		bind[i].buffer = (char *)str;
-		bind[i].length = str_len;
+		statement->bind[i].buffer_type = MYSQL_TYPE_STRING;
+		statement->bind[i].is_null = (my_bool*)0;
+		statement->bind[i].buffer = (char *)str;
+		statement->bind[i].length = str_len;
 		break;
 
 	    default:
@@ -248,7 +245,7 @@ static int statement_execute_start(lua_State *L) {
 	}
     } /* }}} */
 
-    if (mysql_stmt_bind_param(statement->stmt, bind)) {
+    if (mysql_stmt_bind_param(statement->stmt, statement->bind)) {
 	error_message = DBI_ERR_BINDING_PARAMS;
 	goto cleanup;
     }
@@ -265,8 +262,8 @@ static int statement_execute_start(lua_State *L) {
     }
 
 cleanup:
-    if (bind) { 
-	free(bind);
+    if (statement->bind) { 
+	free(statement->bind);
     }
 
     if (buffer) {
@@ -319,10 +316,6 @@ static int statement_execute_cont(lua_State *L) {
 
     metadata = mysql_stmt_result_metadata(statement->stmt);
 
-    if (metadata) {
-        /* TODO stmt_store_result blocks */
-        mysql_stmt_store_result(statement->stmt);
-    }
     statement->metadata = metadata;
 
     lua_pushboolean(L,1);
@@ -483,6 +476,259 @@ cleanup:
 
     lua_pushboolean(L, 1);
     return 1;
+}
+
+static int statement_fetch_impl_start(lua_State *L, statement_t *statement, int named_columns) {
+    int column_count;
+    unsigned long *real_length = NULL;
+    const char *error_message = NULL;
+
+    if (!statement->stmt) {
+	luaL_error(L, DBI_ERR_FETCH_INVALID);
+	return 0;
+    }
+
+    if (!statement->metadata) {
+	luaL_error(L, DBI_ERR_FETCH_NO_EXECUTE);
+	return 0;
+    }
+
+    column_count = mysql_num_fields(statement->metadata);
+
+    if (column_count > 0) {
+	int i;
+
+	real_length = calloc(column_count, sizeof(unsigned long));
+
+        statement->bind = malloc(sizeof(MYSQL_BIND) * column_count);
+        memset(statement->bind, 0, sizeof(MYSQL_BIND) * column_count);
+
+	statement->fields = mysql_fetch_fields(statement->metadata);
+
+	for (i = 0; i < column_count; i++) {
+	    unsigned int length = mysql_buffer_size(&statement->fields[i]);
+	    if (length > sizeof(MYSQL_TIME)) {
+		statement->bind[i].buffer = NULL;
+		statement->bind[i].buffer_length = 0;
+	    } else {
+		char *buffer = (char *)malloc(length);
+		memset(buffer, 0, length);
+
+		statement->bind[i].buffer = buffer;
+		statement->bind[i].buffer_length = length;
+	    }
+
+	    statement->bind[i].buffer_type = statement->fields[i].type; 
+	    statement->bind[i].length = &real_length[i];
+	}
+
+	if (mysql_stmt_bind_result(statement->stmt, statement->bind)) {
+	    error_message = DBI_ERR_BINDING_RESULTS;
+	    goto cleanup;
+	}
+
+	statement->event = mysql_stmt_fetch_start(&(statement->ret),statement->stmt);
+
+    if(statement->event & MYSQL_WAIT_EXCEPT) {
+	    lua_pushnil(L);	    
+        return 1;
+    }
+    if(statement->event & MYSQL_WAIT_TIMEOUT) {
+        statement->timeout = 1000 * mysql_get_timeout_value_ms(statement->mysql);
+    }
+
+    lua_pushboolean(L, 1);
+    lua_pushnumber(L,statement->event);
+    return 2;
+    }
+
+
+cleanup:
+    free(real_length);
+
+    if (statement->bind) {
+	int i;
+
+	for (i = 0; i < column_count; i++) {
+	    free(statement->bind[i].buffer);
+	}
+
+	free(statement->bind);
+    }
+    if(statement->fields) {
+        free(statement->fields);
+    }
+
+
+    if (error_message) {
+        luaL_error(L, error_message, mysql_stmt_error(statement->stmt));
+        return 0;
+    }
+
+    return 1;    
+}
+
+static int statement_fetch_impl_cont(lua_State *L, statement_t *statement, int named_columns, int event) {
+    int column_count;
+    unsigned long *real_length = NULL;
+    int error = 0;
+
+    column_count = mysql_num_fields(statement->metadata);
+
+    if (column_count > 0) {
+	int i;
+
+	real_length = calloc(column_count, sizeof(unsigned long));
+
+	statement->event = mysql_stmt_fetch_cont(&(statement->ret), statement->stmt, event);
+
+    if(statement->event & MYSQL_WAIT_EXCEPT) {
+        lua_pushnil(L);
+        lua_pushfstring(L, mysql_stmt_error(statement->stmt));
+        return 2;
+    }
+
+    if(statement->event & MYSQL_WAIT_TIMEOUT) {
+        statement->timeout = 1000*mysql_get_timeout_value_ms(statement->mysql);
+    }
+    if(statement->ret != 0) {
+        lua_pushnil(L);
+        lua_pushfstring(L,  mysql_stmt_error(statement->stmt));
+        return 2;
+    }
+    if(statement->event > 0) {
+        lua_pushboolean(L, 0);
+        lua_pushnil(L);
+        lua_pushnumber(L, convert_mysql_to_ev(statement->event));
+        return 3;
+    }
+
+	if (statement->ret == 0 || statement->ret == MYSQL_DATA_TRUNCATED) {
+	    int d = 1;
+
+        lua_pushboolean(L,1);
+        lua_pushnil(L);
+	    lua_newtable(L);
+	    for (i = 0; i < column_count; i++) {
+		lua_push_type_t lua_push = mysql_to_lua_push(statement->fields[i].type);
+		const char *name = statement->fields[i].name;
+
+		if (statement->bind[i].buffer == NULL) {
+		    char *buffer = (char *)calloc(real_length[i]+1, sizeof(char));
+		    statement->bind[i].buffer = buffer;
+		    statement->bind[i].buffer_length = real_length[i];
+		    mysql_stmt_fetch_column(statement->stmt, &(statement->bind[i]), i, 0);
+		}
+
+		if (lua_push == LUA_PUSH_NIL) {
+		    if (named_columns) {
+			LUA_PUSH_ATTRIB_NIL(name);
+		    } else {
+			LUA_PUSH_ARRAY_NIL(d);
+		    }
+		} else if (lua_push == LUA_PUSH_INTEGER) {
+		    if (statement->fields[i].type == MYSQL_TYPE_YEAR || statement->fields[i].type == MYSQL_TYPE_SHORT) {
+			if (named_columns) {
+			    LUA_PUSH_ATTRIB_INT(name, *(short *)(statement->bind[i].buffer)); 
+			} else {
+			    LUA_PUSH_ARRAY_INT(d, *(short *)(statement->bind[i].buffer)); 
+			}
+		    } else if (statement->fields[i].type == MYSQL_TYPE_TINY) {
+			if (named_columns) {
+			    LUA_PUSH_ATTRIB_INT(name, (int)*(char *)(statement->bind[i].buffer)); 
+			} else {
+			    LUA_PUSH_ARRAY_INT(d, (int)*(char *)(statement->bind[i].buffer)); 
+			}
+		    } else {
+			if (named_columns) {
+			    LUA_PUSH_ATTRIB_INT(name, *(int *)(statement->bind[i].buffer)); 
+			} else {
+			    LUA_PUSH_ARRAY_INT(d, *(int *)(statement->bind[i].buffer)); 
+			}
+		    }
+		} else if (lua_push == LUA_PUSH_NUMBER) {
+		    if (named_columns) {
+			LUA_PUSH_ATTRIB_FLOAT(name, *(double *)(statement->bind[i].buffer));
+		    } else {
+			LUA_PUSH_ARRAY_FLOAT(d, *(double *)(statement->bind[i].buffer));
+		    }
+		} else if (lua_push == LUA_PUSH_STRING) {
+
+		    if (statement->fields[i].type == MYSQL_TYPE_TIMESTAMP || statement->fields[i].type == MYSQL_TYPE_DATETIME) {
+			char str[20];
+			struct st_mysql_time *t = statement->bind[i].buffer;
+
+			snprintf(str, 20, "%d-%02d-%02d %02d:%02d:%02d", t->year, t->month, t->day, t->hour, t->minute, t->second);
+
+			if (named_columns) {
+			    LUA_PUSH_ATTRIB_STRING(name, str);
+			} else {
+			    LUA_PUSH_ARRAY_STRING(d, str);
+			}
+		    } else if (statement->fields[i].type == MYSQL_TYPE_TIME) {
+			char str[9];
+			struct st_mysql_time *t = statement->bind[i].buffer;
+
+			snprintf(str, 9, "%02d:%02d:%02d", t->hour, t->minute, t->second);
+
+			if (named_columns) {
+			    LUA_PUSH_ATTRIB_STRING(name, str);
+			} else {
+			    LUA_PUSH_ARRAY_STRING(d, str);
+			}
+		    } else if (statement->fields[i].type == MYSQL_TYPE_DATE) {
+			char str[20];
+			struct st_mysql_time *t = statement->bind[i].buffer;
+
+			snprintf(str, 11, "%d-%02d-%02d", t->year, t->month, t->day);
+
+			if (named_columns) {
+			    LUA_PUSH_ATTRIB_STRING(name, str);
+			} else {
+			    LUA_PUSH_ARRAY_STRING(d, str);
+			}
+
+		    } else {
+			if (named_columns) {
+			    LUA_PUSH_ATTRIB_STRING(name, statement->bind[i].buffer);
+			} else {
+			    LUA_PUSH_ARRAY_STRING(d, statement->bind[i].buffer);
+			}
+		    }
+		} else if (lua_push == LUA_PUSH_BOOLEAN) {
+		    if (named_columns) {
+			LUA_PUSH_ATTRIB_BOOL(name, *(int *)(statement->bind[i].buffer));
+		    } else {
+			LUA_PUSH_ARRAY_BOOL(d, *(int *)(statement->bind[i].buffer));
+		    }
+		} else {
+		    luaL_error(L, DBI_ERR_UNKNOWN_PUSH);
+            error = 1;
+		}
+	    }
+	} else {
+	    lua_pushnil(L);	    
+        error = 1;
+	}
+    }
+
+    if (statement->bind) {
+	int i;
+
+	for (i = 0; i < column_count; i++) {
+	    free(statement->bind[i].buffer);
+	}
+
+	free(statement->bind);
+    }
+    if(statement->fields) {
+        free(statement->fields);
+    }
+    if(error) {
+        return 1;
+    }
+    return 3;
+
 }
 
 static int statement_fetch_impl(lua_State *L, statement_t *statement, int named_columns) {
@@ -669,6 +915,27 @@ static int next_iterator(lua_State *L) {
     int named_columns = lua_toboolean(L, lua_upvalueindex(2));
 
     return statement_fetch_impl(L, statement, named_columns);
+}
+
+/*
+ * success,event = statement:fetch_start(named_indexes)
+ */
+static int statement_fetch_start(lua_State *L) {
+    statement_t *statement = (statement_t *)luaL_checkudata(L, 1, DBD_MYSQL_STATEMENT);
+    int named_columns = lua_toboolean(L, 2);
+
+    return statement_fetch_impl_start(L, statement, named_columns);
+}
+
+/*
+ * success,event,table = statement:fetch_cont(named_indexes, event)
+ */
+static int statement_fetch_cont(lua_State *L) {
+    statement_t *statement = (statement_t *)luaL_checkudata(L, 1, DBD_MYSQL_STATEMENT);
+    int named_columns = lua_toboolean(L, 2);
+    int event = lua_toboolean(L, 3);
+
+    return statement_fetch_impl_cont(L, statement, named_columns,event);
 }
 
 /*
@@ -868,6 +1135,8 @@ int dbd_mysql_statement(lua_State *L) {
 	{"execute_start", statement_execute_start},
 	{"execute_cont", statement_execute_cont},
 	{"fetch", statement_fetch},
+	{"fetch_start", statement_fetch_start},
+	{"fetch_cont", statement_fetch_cont},
     {"get_event", statement_get_event},
     {"get_socket", statement_get_socket},
     {"get_timeout", statement_get_timeout},
