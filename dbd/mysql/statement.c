@@ -292,9 +292,6 @@ static int statement_execute_cont(lua_State *L) {
     statement->event = mysql_stmt_execute_cont(&(statement->ret), statement->stmt, event);
     if(statement->event == MYSQL_WAIT_TIMEOUT) {
         statement->timeout = 1000*mysql_get_timeout_value_ms(statement->mysql);
-        /* if(statement->timeout == 0) {
-            while( (statement->event = mysql_stmt_execute_cont(&(statement->ret), statement->stmt, statement->event) ) ) { printf("Calling execute_cont\n"); }
-        } */
     }
     if(statement->ret) {
         lua_pushnil(L);
@@ -527,6 +524,7 @@ static int statement_fetch_impl(lua_State *L, statement_t *statement, int named_
 	    goto cleanup;
 	}
 
+    /* TODO mysql_stmt_fetch blocks */
 	fetch_result_ok = mysql_stmt_fetch(statement->stmt);
 	if (fetch_result_ok == 0 || fetch_result_ok == MYSQL_DATA_TRUNCATED) {
 	    int d = 1;
@@ -851,9 +849,9 @@ int dbd_mysql_statement(lua_State *L) {
 	{"execute_start", statement_execute_start},
 	{"execute_cont", statement_execute_cont},
 	{"fetch", statement_fetch},
-        {"get_event", statement_get_event},
-        {"get_socket", statement_get_socket},
-        {"get_timeout", statement_get_timeout},
+    {"get_event", statement_get_event},
+    {"get_socket", statement_get_socket},
+    {"get_timeout", statement_get_timeout},
 	{"prepare", statement_prepare},
 	{"prepare_start", statement_prepare_start},
 	{"prepare_cont", statement_prepare_cont},
