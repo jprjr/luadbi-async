@@ -254,7 +254,13 @@ static int statement_execute_start(lua_State *L) {
     }
 
     statement->event = mysql_stmt_execute_start(&(statement->ret), statement->stmt);
-    if(statement->event == MYSQL_WAIT_TIMEOUT) {
+
+    if(statement->event & MYSQL_WAIT_EXCEPT) {
+        lua_pushnil(L);
+        lua_pushfstring(L, DBI_ERR_BINDING_EXEC, mysql_stmt_error(statement->stmt) );
+    }
+
+    if(statement->event & MYSQL_WAIT_TIMEOUT) {
         statement->timeout = 1000*mysql_get_timeout_value_ms(statement->mysql);
     }
 
@@ -290,7 +296,13 @@ static int statement_execute_cont(lua_State *L) {
         luaL_error(L,DBI_ERR_INVALID_STATEMENT);
     }
     statement->event = mysql_stmt_execute_cont(&(statement->ret), statement->stmt, event);
-    if(statement->event == MYSQL_WAIT_TIMEOUT) {
+
+    if(statement->event & MYSQL_WAIT_EXCEPT) {
+        lua_pushnil(L);
+        lua_pushfstring(L, DBI_ERR_BINDING_EXEC, mysql_stmt_error(statement->stmt) );
+    }
+
+    if(statement->event & MYSQL_WAIT_TIMEOUT) {
         statement->timeout = 1000*mysql_get_timeout_value_ms(statement->mysql);
     }
     if(statement->ret) {
@@ -779,8 +791,12 @@ static int statement_prepare_start(lua_State *L) {
 
     statement->event = mysql_stmt_prepare_start(&(statement->ret), statement->stmt, sql_query, sql_len);
 
-    /* TODO check for errors? */
-    if(statement->event == MYSQL_WAIT_TIMEOUT) {
+    if(statement->event & MYSQL_WAIT_EXCEPT) {
+        lua_pushnil(L);
+        lua_pushfstring(L, DBI_ERR_PREP_STATEMENT, mysql_stmt_error(statement->stmt) );
+    }
+
+    if(statement->event & MYSQL_WAIT_TIMEOUT) {
         statement->timeout = 1000 * mysql_get_timeout_value_ms(statement->mysql);
     }
 
@@ -800,11 +816,14 @@ static int statement_prepare_cont(lua_State *L) {
         luaL_error(L, DBI_ERR_INVALID_STATEMENT);
     }
     statement->event = mysql_stmt_prepare_cont(&(statement->ret), statement->stmt, event);
-    if(statement->event == MYSQL_WAIT_TIMEOUT) {
+
+    if(statement->event & MYSQL_WAIT_EXCEPT) {
+        lua_pushnil(L);
+        lua_pushfstring(L, DBI_ERR_PREP_STATEMENT, mysql_stmt_error(statement->stmt) );
+    }
+
+    if(statement->event & MYSQL_WAIT_TIMEOUT) {
         statement->timeout = 1000*mysql_get_timeout_value_ms(statement->mysql);
-        /* if(statement->timeout == 0) {
-            while( (statement->event = mysql_stmt_prepare_cont(&(statement->ret), statement->stmt, event)) ) {}
-        } */
     }
     if(statement->ret) {
         lua_pushnil(L);
