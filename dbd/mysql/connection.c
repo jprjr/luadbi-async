@@ -125,8 +125,14 @@ static int connection_connect_start(lua_State *L) {
 
     mysql_options(conn->mysql, MYSQL_OPT_NONBLOCK, 0);
     conn->event = mysql_real_connect_start(&(conn->ret), conn->mysql, host, user, password, db, port, unix_socket, client_flag);
-    /* TODO Check for actual errors (docs don't mention anything about that) */
-    if(conn->event == 1) {
+
+    if(conn->event & MYSQL_WAIT_EXCEPT) {
+        lua_pushnil(L);
+        lua_pushfstring(L, DBI_ERR_CONNECTION_FAILED, mysql_error(conn->mysql));
+        return 2;
+    }
+
+    if(conn->event & MYSQL_WAIT_TIMEOUT) {
         conn->timeout = 1000 * mysql_get_timeout_value_ms(conn->mysql);
     }
 
@@ -135,6 +141,7 @@ static int connection_connect_start(lua_State *L) {
 
     return 2;
 }
+
 /*
  * success, err, event = connection:connect_cont(event)
  * Returns success, error message, next event
@@ -151,12 +158,8 @@ static int connection_connect_cont(lua_State *L) {
 
     conn->event = mysql_real_connect_cont(&(conn->ret), conn->mysql, event);
 
-    if(conn->event == MYSQL_WAIT_TIMEOUT) {
+    if(conn->event & MYSQL_WAIT_TIMEOUT) {
         conn->timeout = 1000*mysql_get_timeout_value_ms(conn->mysql);
-        /* if(conn->timeout == 0) { */
-            /* TODO This seems to happen, if I call mysql_real_connect cont continuously it will return 0 */
-            /* while( (conn->event = mysql_real_connect_cont(&(conn->ret),conn->mysql,conn->event) ) ) {} */
-        /* } */
     }
     if(conn->ret == NULL ) {
         lua_pushnil(L);
@@ -170,6 +173,7 @@ static int connection_connect_cont(lua_State *L) {
         return 2;
     } /* Connection successful */
     /* turn off autocommit */
+
     /* TODO connect_cont: This is a blocking call */
     mysql_autocommit(conn->mysql,0);
     lua_pushboolean(L,1);
@@ -206,6 +210,7 @@ static int connection_get_timeout(lua_State *L) {
     return 1;
 }
 
+/* TODO Non-blocking autocommit */
 /*
  * success = connection:autocommit(on)
  */
@@ -239,6 +244,7 @@ static int connection_close(lua_State *L) {
     return 1;
 }
 
+/* TODO Non-blocking commit */
 /*
  * success = connection:commit()
  */
@@ -254,6 +260,7 @@ static int connection_commit(lua_State *L) {
     return 1;
 }
 
+/* TODO non-blocking ping */
 /* 
  * ok = connection:ping()
  */
