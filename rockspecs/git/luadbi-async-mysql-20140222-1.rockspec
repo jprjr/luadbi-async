@@ -32,7 +32,7 @@ external_dependencies = {
 build = {
 	type = "builtin",
 	modules = {
-		['dbd.mysqlasync'] = {
+		['dbdmysqlasync'] = {
 			sources = {
 				'dbd/common.c',
 				'dbd/mysql/main.c',

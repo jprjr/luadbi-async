@@ -263,7 +263,7 @@ static int statement_execute_start(lua_State *L) {
 
 cleanup:
     if (statement->bind) { 
-	free(statement->bind);
+	    free(statement->bind);
     }
 
     if (buffer) {
@@ -1009,6 +1009,7 @@ int dbd_mysql_statement_create(lua_State *L, connection_t *conn) {
     statement->mysql = conn->mysql;
     statement->stmt = stmt;
     statement->metadata = NULL;
+    statement->bind = NULL;
 
     luaL_getmetatable(L, DBD_MYSQL_STATEMENT);
     lua_setmetatable(L, -2);
