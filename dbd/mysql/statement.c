@@ -555,9 +555,6 @@ cleanup:
 
 	free(statement->bind);
     }
-    if(statement->fields) {
-        free(statement->fields);
-    }
 
 
     if (error_message) {
@@ -720,9 +717,6 @@ static int statement_fetch_impl_cont(lua_State *L, statement_t *statement, int n
 	}
 
 	free(statement->bind);
-    }
-    if(statement->fields) {
-        free(statement->fields);
     }
     if(error) {
         return 1;
