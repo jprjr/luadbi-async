@@ -933,7 +933,7 @@ static int statement_fetch_start(lua_State *L) {
 static int statement_fetch_cont(lua_State *L) {
     statement_t *statement = (statement_t *)luaL_checkudata(L, 1, DBD_MYSQL_STATEMENT);
     int named_columns = lua_toboolean(L, 2);
-    int event = lua_toboolean(L, 3);
+    int event = convert_ev_to_mysql(lua_tonumber(L,3));
 
     return statement_fetch_impl_cont(L, statement, named_columns,event);
 }
