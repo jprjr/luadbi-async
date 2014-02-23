@@ -363,9 +363,8 @@ statement_execute_cont (lua_State * L) /* {{{ */
   if (statement->event > 0)
     {
       lua_pushboolean (L, 0);
-      lua_pushnil (L);
       lua_pushnumber (L, convert_mysql_to_ev (statement->event));
-      return 3;
+      return 2;
     }
 
   metadata = mysql_stmt_result_metadata (statement->stmt);
@@ -702,9 +701,8 @@ statement_fetch_impl_cont (lua_State * L, statement_t * statement, /* {{{ */
       if (statement->event > 0)
 	{
 	  lua_pushboolean (L, 0);
-	  lua_pushnil (L);
 	  lua_pushnumber (L, convert_mysql_to_ev (statement->event));
-	  values = 3;
+	  values = 2;
 	}
 
       if (mysql_stmt_errno (statement->stmt) == 0
@@ -713,9 +711,8 @@ statement_fetch_impl_cont (lua_State * L, statement_t * statement, /* {{{ */
 	  int d = 1;
 
 	  lua_pushboolean (L, 1);
-	  lua_pushnil (L);
 	  lua_newtable (L);
-	  values = 3;
+	  values = 2;
 	  for (i = 0; i < column_count; i++)
 	    {
 	      lua_push_type_t lua_push =
@@ -1441,9 +1438,8 @@ statement_prepare_cont (lua_State * L) /* {{{ */
   if (statement->event > 0)
     {
       lua_pushboolean (L, 0);
-      lua_pushnil (L);
       lua_pushnumber (L, convert_mysql_to_ev (statement->event));
-      return 3;
+      return 2;
     }
   lua_pushboolean (L, 1);
   return 1;

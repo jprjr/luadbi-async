@@ -197,7 +197,6 @@ connection_connect_cont (lua_State * L)
   if (conn->event > 0)
     {
       lua_pushboolean (L, 0);
-      lua_pushnil (L);
       lua_pushnumber (L, convert_mysql_to_ev (conn->event));
       return 2;
     }				/* Connection successful */
@@ -331,7 +330,7 @@ connection_ping (lua_State * L)
 }
 
 /*
- * statement,err = connection:create_statement(sql_string)
+ * statement,err = connection:create_statement()
  */
 static int
 connection_create_statement (lua_State * L)
