@@ -478,7 +478,7 @@ cleanup:
     return 1;
 }
 
-static int statement_fetch_impl_start(lua_State *L, statement_t *statement, int named_columns) {
+static int statement_fetch_impl_start(lua_State *L, statement_t *statement) {
     int column_count;
     unsigned long *real_length = NULL;
     const char *error_message = NULL;
@@ -541,6 +541,10 @@ static int statement_fetch_impl_start(lua_State *L, statement_t *statement, int 
     lua_pushnumber(L,statement->event);
     return 2;
     }
+    else {
+        lua_pushnil(L);
+        return 1;
+    }
 
 
 cleanup:
@@ -565,7 +569,7 @@ cleanup:
     return 1;    
 }
 
-static int statement_fetch_impl_cont(lua_State *L, statement_t *statement, int named_columns, int event) {
+static int statement_fetch_impl_cont(lua_State *L, statement_t *statement, int event, int named_columns) {
     int column_count;
     unsigned long *real_length = NULL;
     int error = 0;
@@ -916,9 +920,8 @@ static int next_iterator(lua_State *L) {
  */
 static int statement_fetch_start(lua_State *L) {
     statement_t *statement = (statement_t *)luaL_checkudata(L, 1, DBD_MYSQL_STATEMENT);
-    int named_columns = lua_toboolean(L, 2);
 
-    return statement_fetch_impl_start(L, statement, named_columns);
+    return statement_fetch_impl_start(L, statement);
 }
 
 /*
@@ -926,10 +929,10 @@ static int statement_fetch_start(lua_State *L) {
  */
 static int statement_fetch_cont(lua_State *L) {
     statement_t *statement = (statement_t *)luaL_checkudata(L, 1, DBD_MYSQL_STATEMENT);
-    int named_columns = lua_toboolean(L, 2);
-    int event = convert_ev_to_mysql(lua_tonumber(L,3));
+    int event = convert_ev_to_mysql(lua_tonumber(L,2));
+    int named_columns = lua_toboolean(L, 3);
 
-    return statement_fetch_impl_cont(L, statement, named_columns,event);
+    return statement_fetch_impl_cont(L, statement, named_columns, event);
 }
 
 /*
@@ -1056,6 +1059,7 @@ static int statement_prepare_start(lua_State *L) {
     if(statement->event & MYSQL_WAIT_EXCEPT) {
         lua_pushnil(L);
         lua_pushfstring(L, DBI_ERR_PREP_STATEMENT, mysql_stmt_error(statement->stmt) );
+        return 2;
     }
 
     if(statement->event & MYSQL_WAIT_TIMEOUT) {
