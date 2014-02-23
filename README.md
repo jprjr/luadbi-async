@@ -59,6 +59,12 @@ Non-blocking equivalents of these functions will have `<function>_start` and `<f
 
 The `_start` functions generally return `success, err/event` to indicate if the function was submitted successfully, and what event to wait on (such as `EV_READ` or `EV_TIMEOUT`). The `_cont` functions generally return `success, err/event, (data)` - in the case of an error, `success` will be `nil`. If the database indicates there's some event it's still waiting, `success` will be `false` and `event` will be set. If `success` is `true`, everything completed normally.
 
+## Caveats/gotchas
+
+Important things to know:
+
+* Every connection can only run one query at a time. I don't check if you're trying to submit multiple statements at once, you'll have to manage that on your own.
+
 ## Requirements
 
 Right now, the MySQL client libraries don't have (documented) async methods, but MariaDB does. So this *requires* the MariaDB client, it shouldn't compile against MySQL.
