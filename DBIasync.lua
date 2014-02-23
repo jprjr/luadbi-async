@@ -1,4 +1,5 @@
-module('DBI', package.seeall)
+local _M = {}
+_M._NAME = "DBIasync"
 
 -- Driver to module mapping
 local name_to_module = {
@@ -32,7 +33,7 @@ end
 
  -- High level DB connection function
  -- This should be used rather than DBD.{Driver}.New
-function New(driver)
+function _M.New(driver)
     local modulefile = name_to_module[driver]
 
     if not modulefile then
@@ -57,7 +58,7 @@ end
 
 -- Help function to do prepare and execute in 
 -- a single step
-function Do(dbh, sql, ...)
+function _M.Do(dbh, sql, ...)
     local sth,err = dbh:prepare(sql)
 
     if not sth then
@@ -74,6 +75,8 @@ function Do(dbh, sql, ...)
 end
 
 -- Lit drivers available on this system
-function Drivers()
+function _M.Drivers()
     return available_drivers() 
 end
+
+return _M

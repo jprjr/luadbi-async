@@ -11,7 +11,7 @@ The usage for this is a bit different from the normal DBI. The main DBI module h
 ```lua
 #!/usr/bin/env lua
 
-require "DBIasync";
+local DBI = require "DBIasync";
 local luaevent = require "luaevent.core";
 
 local dbh = DBI.New('MySQL');
@@ -75,9 +75,9 @@ All these methods are completed for MySQL.
 
 ### DBI Object
 
-`DBI` (object)
+local DBI = require("DBIasync")
 
-On requiring DBIasync, a new global object DBI is registered (expect this to change soon - instead of registering a global object, the syntax will be somethnig more like `local dbi = require "DBIasync"`
+Again, since I don't want this to conflict with the old LuaDBI - this doesn't register any global objects.
 
 `connection = DBI.New(<driver>)` 
 
