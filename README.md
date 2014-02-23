@@ -149,7 +149,7 @@ Performs a SQL ping.
 
 Starts preparing a statement.
 
-`success, err/event = statement:prepare_cont(query)`
+`success, err/event = statement:prepare_cont(event)`
 
 Finishes preparing a statement.
 
