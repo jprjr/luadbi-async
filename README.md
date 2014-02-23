@@ -55,9 +55,9 @@ end
 
 Methods like `connect` and `execute` are blocking by default, and operate just as they do in normal luadbi.
 
-Non-blocking equivalents of these functions will have `<function>_start` and `<function>_cont` functions. The `_start` submits a task and returns wait event to wait on. You can then get the socket in use by your connection, and link it all together with your event-y framework. `<function>_cont` will return any errors encountered. If the `event` returned is zero, that means the method completed without blocking.
+Non-blocking equivalents of these functions will have `<function>_start` and `<function>_cont` functions. The `_start` submits a task and returns what event to wait on. You can then get the socket in use by your connection, and link it all together with your event-y framework. `<function>_cont` will return any errors encountered. If the `event` returned is zero, that means the method completed without blocking.
 
-The `_start` functions generally return `success, err/event` to indicate if the function was submitted successfully, and what event to wait on (such as `EV_READ` or `EV_TIMEOUT`. The `_cont` functions generally return `success, err/event, (data)` - in the case of an error, `success` will be `nil`. If the database indicates there's some event it's still waiting, `success` will be `false` and `event` will be set. If `success` is `true`, everything completed normally.
+The `_start` functions generally return `success, err/event` to indicate if the function was submitted successfully, and what event to wait on (such as `EV_READ` or `EV_TIMEOUT`). The `_cont` functions generally return `success, err/event, (data)` - in the case of an error, `success` will be `nil`. If the database indicates there's some event it's still waiting, `success` will be `false` and `event` will be set. If `success` is `true`, everything completed normally.
 
 ## Requirements
 
